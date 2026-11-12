@@ -84,4 +84,27 @@ float network_train_step(
     float learning_rate
 );
 
+/*
+ * Performs one classification training step.
+ *
+ * The final layer produces logits.
+ * Softmax converts logits into probabilities.
+ * Cross-entropy calculates the loss.
+ *
+ * Targets must be one-hot encoded.
+ *
+ * max_gradient_norm controls global gradient clipping
+ * across all weights and biases in the network.
+ *
+ * Returns the mean cross-entropy loss before the update,
+ * or NAN if the operation fails.
+ */
+float network_train_classification_step(
+    Network *network,
+    const Matrix *input,
+    const Matrix *one_hot_targets,
+    float learning_rate,
+    float max_gradient_norm
+);
+
 #endif
