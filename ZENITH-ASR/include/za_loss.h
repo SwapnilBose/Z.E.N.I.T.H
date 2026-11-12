@@ -34,4 +34,33 @@ float cross_entropy_loss(
     const Matrix *targets
 );
 
+
+/*
+ * Calculate the gradient of softmax followed by
+ * categorical cross-entropy.
+ *
+ * Formula:
+ *
+ *     gradient = (probabilities - targets) / N
+ *
+ * N = number of samples.
+ *
+ * Every row represents one sample.
+ * Every column represents one class.
+ *
+ * The returned matrix contains gradients with respect
+ * to the original logits.
+ *
+ * Returns:
+ *     A newly allocated gradient matrix on success.
+ *     An empty matrix on failure.
+ *
+ * The caller owns the returned matrix.
+ */
+Matrix softmax_cross_entropy_gradient(
+    const Matrix *probabilities,
+    const Matrix *targets
+);
+
+
 #endif

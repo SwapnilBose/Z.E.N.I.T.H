@@ -36,6 +36,7 @@ static int validate_distribution(const Matrix *matrix)
     if (matrix->rows == 0 || matrix->cols == 0)
         return 0;
 
+    /* Prevent size_t multiplication overflow. */
     if (matrix->rows > SIZE_MAX / matrix->cols)
         return 0;
 
@@ -74,16 +75,14 @@ static int validate_distribution(const Matrix *matrix)
  * N = number of samples.
  * C = number of classes.
  *
- * This implementation also supports soft targets,
- * provided each target row sums to 1.
+ * Supports soft targets, provided each target
+ * row sums to 1.
  */
 float cross_entropy_loss(
     const Matrix *probabilities,
     const Matrix *targets)
 {
-    /*
-     * Validate matrix pointers and dimensions.
-     */
+    /* Validate matrix pointers. */
     if (!probabilities || !targets)
         return NAN;
 
@@ -94,25 +93,19 @@ float cross_entropy_loss(
         probabilities->cols == 0)
         return NAN;
 
-    /*
-     * Both matrices must have identical dimensions.
-     */
+    /* Both matrices must have identical dimensions. */
     if (probabilities->rows != targets->rows ||
         probabilities->cols != targets->cols)
         return NAN;
 
-    /*
-     * Validate both distributions.
-     */
+    /* Validate both probability distributions. */
     if (!validate_distribution(probabilities))
         return NAN;
 
     if (!validate_distribution(targets))
         return NAN;
 
-    /*
-     * Accumulate loss using double precision.
-     */
+    /* Accumulate loss using double precision. */
     double total_loss = 0.0;
 
     for (size_t row = 0; row < probabilities->rows; row++)
@@ -126,10 +119,6 @@ float cross_entropy_loss(
 
             /*
              * Avoid log(0).
-             *
-             * This also prevents an infinite loss when
-             * a model assigns exactly zero probability
-             * to the correct class.
              */
             if (probability < LOSS_EPSILON)
                 probability = LOSS_EPSILON;
@@ -143,13 +132,95 @@ float cross_entropy_loss(
         }
     }
 
-    /*
-     * Return mean loss across all samples.
-     */
+    /* Mean loss across all samples. */
     double mean_loss = total_loss / (double)probabilities->rows;
 
     if (!isfinite(mean_loss))
         return NAN;
 
+    /* Return the loss BEFORE ending this function. */
     return (float)mean_loss;
+}
+
+
+/*
+ * Calculate the gradient of combined softmax
+ * and categorical cross-entropy.
+ *
+ * Mathematical result:
+ *
+ *     dL/dz = (probabilities - targets) / N
+ *
+ * This is the gradient with respect to the original
+ * logits, not the probabilities.
+ *
+ * N is the number of samples in the batch.
+ */
+Matrix softmax_cross_entropy_gradient(
+    const Matrix *probabilities,
+    const Matrix *targets)
+{
+    Matrix gradient = {0};
+
+    /* Validate pointers. */
+    if (!probabilities || !targets)
+        return gradient;
+
+    if (!probabilities->data || !targets->data)
+        return gradient;
+
+    /* Validate dimensions. */
+    if (probabilities->rows == 0 ||
+        probabilities->cols == 0)
+        return gradient;
+
+    if (probabilities->rows != targets->rows ||
+        probabilities->cols != targets->cols)
+        return gradient;
+
+    /* Reuse probability distribution validation. */
+    if (!validate_distribution(probabilities))
+        return gradient;
+
+    if (!validate_distribution(targets))
+        return gradient;
+
+    /* Allocate the gradient matrix. */
+    gradient = matrix_create(
+        probabilities->rows,
+        probabilities->cols
+    );
+
+    if (!gradient.data)
+        return (Matrix){0};
+
+    /*
+     * Calculate the gradient for every sample
+     * and every class.
+     */
+    size_t element_count =
+        probabilities->rows * probabilities->cols;
+
+    double sample_count = (double)probabilities->rows;
+
+    for (size_t i = 0; i < element_count; i++)
+    {
+        double predicted = (double)probabilities->data[i];
+        double expected = (double)targets->data[i];
+
+        /*
+         * Average gradients across the batch.
+         */
+        double value = (predicted - expected) / sample_count;
+
+        if (!isfinite(value))
+        {
+            matrix_free(&gradient);
+            return (Matrix){0};
+        }
+
+        gradient.data[i] = (float)value;
+    }
+
+    return gradient;
 }
